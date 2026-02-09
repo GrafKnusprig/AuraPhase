@@ -53,6 +53,30 @@
       button:hover { border-color: rgba(255, 255, 255, 0.2); }
       .value { text-align: right; font-variant-numeric: tabular-nums; color: var(--accent-strong); }
       .hint { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.3; }
+      .group {
+        margin-top: 12px;
+        padding: 10px;
+        background: linear-gradient(180deg, #241233 0%, #1a0c27 100%);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+      }
+      .group-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+      }
+      .group-title { color: var(--text); font-weight: 600; }
+      .row-compact { margin: 6px 0 2px; }
+      .row-dir { grid-template-columns: 80px 1fr; }
+      .dir-toggle {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        width: 100%;
+      }
+      .dir-btn { width: 150px; margin-left: auto; }
+      .is-disabled { opacity: 0.45; }
 
       .switch {
         position: relative;
@@ -111,10 +135,21 @@
       <span class="value" id="intVal"></span>
     </div>
 
-    <div class="row">
-      <span>Direction</span>
-      <button id="directionBtn" type="button"></button>
-      <span></span>
+    <div class="group" id="spinGroup">
+      <div class="group-head">
+        <span class="group-title">Direction Simulation</span>
+        <label class="switch" aria-label="Enable Direction Simulation">
+          <input id="spinToggle" type="checkbox">
+          <span class="slider" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="row row-compact row-dir">
+        <span>Direction</span>
+        <div class="dir-toggle" id="directionWrap" role="group" aria-label="Spin direction">
+          <button id="directionBtn" type="button" class="dir-btn" aria-label="Toggle direction"></button>
+        </div>
+      </div>
     </div>
 
     <div class="hint">

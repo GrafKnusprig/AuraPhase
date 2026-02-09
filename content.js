@@ -10,6 +10,7 @@
     speedHz: 0.25,
     intensity: 0.7,
     direction: "right",
+    spinEnabled: true,
 
     ctx: null,
     pipelines: new WeakMap(),
@@ -51,20 +52,18 @@
     return shaper;
   }
 
-  function makeRearFocusShaper(ac) {
-    const shaper = ac.createWaveShaper();
+  function applyRearFocusCurve(shaper, frontAtten) {
     const N = 2048;
     const curve = new Float32Array(N);
-    const frontAtten = clamp(A.rearFrontAtten, 0.0, 1.0);
+    const atten = clamp(frontAtten, 0.0, 1.0);
 
     for (let i = 0; i < N; i++) {
       const x = (i / (N - 1)) * 2 - 1; // -1..1
-      const scale = x >= 0 ? frontAtten : 1.0;
+      const scale = x >= 0 ? atten : 1.0;
       curve[i] = x * scale;
     }
     shaper.curve = curve;
     shaper.oversample = "4x";
-    return shaper;
   }
 
 
@@ -108,7 +107,8 @@
 
     // Quadrature delay for ITD (90-degree phase shift)
     const quadDelay = ac.createDelay(30.0);
-    const rearFocus = makeRearFocusShaper(ac);
+    const rearFocus = ac.createWaveShaper();
+    applyRearFocusCurve(rearFocus, A.rearFrontAtten);
 
     // --- PAN (ILD) ---
     const panDepth = ac.createGain();
@@ -198,6 +198,7 @@
     p.lfo.frequency.value = A.speedHz;
     p.dirGain.gain.value = A.direction === "left" ? 1 : -1;
     p.quadDelay.delayTime.value = Math.min(30, 0.25 / Math.max(0.001, A.speedHz));
+    applyRearFocusCurve(p.rearFocus, A.spinEnabled ? A.rearFrontAtten : 1.0);
 
     if (!A.enabled) {
       // BYPASS: keep audio flowing, but zero out effect
@@ -215,8 +216,9 @@
     const trem = A.tremMax * A.intensity;                  // subtle
 
     p.panDepth.gain.value = panAmt;
-    p.delayDepth.gain.value = d;
-    p.delayDepthNeg.gain.value = -d;
+    const delayDepth = A.spinEnabled ? d : 0;
+    p.delayDepth.gain.value = delayDepth;
+    p.delayDepthNeg.gain.value = -delayDepth;
     p.tremDepth.gain.value = trem;
   }
 
@@ -243,12 +245,14 @@
       enabled: false,
       speedHz: 0.25,
       intensity: 0.7,
-      direction: "right"
+      direction: "right",
+      spinEnabled: true
     });
     A.enabled = !!res.enabled;
     A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.01, 1.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
     A.direction = res.direction === "left" ? "left" : "right";
+    A.spinEnabled = res.spinEnabled !== false;
   }
 
   function initOrUpdate() {
@@ -265,6 +269,7 @@
     if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.01, 1.0);
     if (msg.intensity != null) A.intensity = clamp(Number(msg.intensity), 0.0, 1.0);
     if (msg.direction != null) A.direction = msg.direction === "left" ? "left" : "right";
+    if (msg.spinEnabled != null) A.spinEnabled = !!msg.spinEnabled;
 
     initOrUpdate();
   });

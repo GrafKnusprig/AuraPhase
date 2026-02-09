@@ -18,7 +18,7 @@ async function sendState(tabId, state) {
 }
 
 (async () => {
-  const defaults = { enabled: false, speedHz: 0.25, intensity: 0.7, direction: "right" };
+  const defaults = { enabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
   const stored = await browser.storage.local.get(defaults);
 
   const toggle = document.getElementById("toggle");
@@ -26,7 +26,9 @@ async function sendState(tabId, state) {
   const intensity = document.getElementById("intensity");
   const speedVal = document.getElementById("speedVal");
   const intVal = document.getElementById("intVal");
+  const spinToggle = document.getElementById("spinToggle");
   const directionBtn = document.getElementById("directionBtn");
+  const directionWrap = document.getElementById("directionWrap");
 
   toggle.checked = !!stored.enabled;
   speed.value = stored.speedHz;
@@ -36,9 +38,17 @@ async function sendState(tabId, state) {
 
   let direction = stored.direction === "left" ? "left" : "right";
   const setDirectionLabel = () => {
-    directionBtn.textContent = direction === "left" ? "Left" : "Right";
+    directionBtn.textContent = direction === "left" ? "Counterclockwise" : "Clockwise";
   };
   setDirectionLabel();
+
+  spinToggle.checked = stored.spinEnabled !== false;
+  const updateSpinUi = () => {
+    const disabled = !spinToggle.checked;
+    directionBtn.disabled = disabled;
+    directionWrap.classList.toggle("is-disabled", disabled);
+  };
+  updateSpinUi();
 
   async function applyNow() {
     const tab = await getActiveTab();
@@ -46,7 +56,8 @@ async function sendState(tabId, state) {
       enabled: toggle.checked,
       speedHz: Number(speed.value),
       intensity: Number(intensity.value),
-      direction
+      direction,
+      spinEnabled: spinToggle.checked
     };
     await browser.storage.local.set(state);
     await ensureInjected(tab.id);
@@ -60,6 +71,11 @@ async function sendState(tabId, state) {
 
   intensity.addEventListener("input", () => { intVal.textContent = fmtInt(intensity.value); });
   intensity.addEventListener("change", applyNow);
+
+  spinToggle.addEventListener("change", async () => {
+    updateSpinUi();
+    await applyNow();
+  });
 
   directionBtn.addEventListener("click", async () => {
     direction = direction === "left" ? "right" : "left";
