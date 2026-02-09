@@ -18,8 +18,14 @@ async function sendState(tabId, state) {
 }
 
 (async () => {
-  const defaults = { enabled: false, monoEnabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
+  const defaults = { monoEnabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
   const stored = await browser.storage.local.get(defaults);
+
+  const tab = await getActiveTab();
+  if (tab?.id != null) await ensureInjected(tab.id);
+  const liveState = tab?.id != null
+    ? await browser.tabs.sendMessage(tab.id, { type: "AURAPHASE_GET_STATE" }).catch(() => null)
+    : null;
 
   const toggle = document.getElementById("toggle");
   const monoToggle = document.getElementById("monoToggle");
@@ -35,20 +41,20 @@ async function sendState(tabId, state) {
   const directionWrap = document.getElementById("directionWrap");
   const spinGroup = document.getElementById("spinGroup");
 
-  toggle.checked = !!stored.enabled;
-  monoToggle.checked = !!stored.monoEnabled;
-  speed.value = stored.speedHz;
-  intensity.value = stored.intensity;
+  toggle.checked = !!liveState?.enabled;
+  monoToggle.checked = !!(liveState?.monoEnabled ?? stored.monoEnabled);
+  speed.value = liveState?.speedHz ?? stored.speedHz;
+  intensity.value = liveState?.intensity ?? stored.intensity;
   speedVal.textContent = fmtHz(speed.value);
   intVal.textContent = fmtInt(intensity.value);
 
-  let direction = stored.direction === "left" ? "left" : "right";
+  let direction = (liveState?.direction ?? stored.direction) === "left" ? "left" : "right";
   const setDirectionLabel = () => {
     directionBtn.textContent = direction === "left" ? "Clockwise" : "Counterclockwise";
   };
   setDirectionLabel();
 
-  spinToggle.checked = stored.spinEnabled !== false;
+  spinToggle.checked = (liveState?.spinEnabled ?? stored.spinEnabled) !== false;
   let vizRaf = null;
   let vizLastTs = null;
   let vizPhase = 0;
@@ -123,7 +129,13 @@ async function sendState(tabId, state) {
       direction,
       spinEnabled: spinToggle.checked
     };
-    await browser.storage.local.set(state);
+    await browser.storage.local.set({
+      monoEnabled: state.monoEnabled,
+      speedHz: state.speedHz,
+      intensity: state.intensity,
+      direction: state.direction,
+      spinEnabled: state.spinEnabled
+    });
     await ensureInjected(tab.id);
     await sendState(tab.id, state);
   }

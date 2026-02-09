@@ -17,6 +17,7 @@
 
     ctx: null,
     pipelines: new WeakMap(),
+    pipelineCount: 0,
     watcher: null,
 
     // caps / tuning
@@ -35,6 +36,12 @@
   function ensureContext() {
     if (A.ctx) return A.ctx;
     A.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    A.ctx.addEventListener("statechange", () => {
+      if (A.ctx && A.ctx.state === "closed") {
+        A.enabled = false;
+        applyParamsToAll();
+      }
+    });
     return A.ctx;
   }
 
@@ -235,6 +242,7 @@
       panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
     });
+    A.pipelineCount += 1;
 
     applyParamsToOne(mediaEl);
 
@@ -243,7 +251,14 @@
       if (!document.contains(mediaEl)) {
         // don't hard-stop audio contexts; just forget pipeline
         // (the node graph will be GC'ed when element goes away)
-        A.pipelines.delete(mediaEl);
+        if (A.pipelines.has(mediaEl)) {
+          A.pipelines.delete(mediaEl);
+          A.pipelineCount = Math.max(0, A.pipelineCount - 1);
+          if (A.pipelineCount === 0 && A.enabled) {
+            A.enabled = false;
+            applyParamsToAll();
+          }
+        }
         obs.disconnect();
       }
     });
@@ -317,14 +332,13 @@
 
   async function loadSettings() {
     const res = await browser.storage.local.get({
-      enabled: false,
       monoEnabled: false,
       speedHz: 0.25,
       intensity: 0.7,
       direction: "right",
       spinEnabled: true
     });
-    A.enabled = !!res.enabled;
+    A.enabled = false;
     A.monoEnabled = !!res.monoEnabled;
     A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.01, 1.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
@@ -341,6 +355,16 @@
 
   browser.runtime.onMessage.addListener((msg) => {
     if (!msg) return;
+    if (msg.type === "AURAPHASE_GET_STATE") {
+      return Promise.resolve({
+        enabled: A.enabled,
+        monoEnabled: A.monoEnabled,
+        speedHz: A.speedHz,
+        intensity: A.intensity,
+        direction: A.direction,
+        spinEnabled: A.spinEnabled
+      });
+    }
     if (msg.type !== "AURAPHASE") return;
 
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
