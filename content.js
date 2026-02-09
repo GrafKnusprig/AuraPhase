@@ -16,14 +16,15 @@
     watcher: null,
 
     // caps / tuning
-    maxPan: 0.85,          // never hard L/R
-    baseDelay: 0.006,      // 6ms
-    maxDelayDepth: 0.006,  // +/- 6ms => 0..12ms swing
-    tremMax: 0.12,         // subtle
+    maxPan: 0.7,           // never hard L/R
+    baseDelay: 0.004,      // 4ms
+    maxDelayDepth: 0.004,  // +/- 4ms => 0..8ms swing
+    tremMax: 0.08,         // subtle
 
     // shape: <1 lingers at extremes; >1 lingers near center
     // 0.55 spends more time left/right without hard edges
-    shapeGamma: 0.55
+    shapeGamma: 0.55,
+    rearFrontAtten: 0.35
   };
 
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -44,6 +45,22 @@
       const x = (i / (N - 1)) * 2 - 1; // -1..1
       const y = Math.sign(x) * Math.pow(Math.abs(x), g);
       curve[i] = y;
+    }
+    shaper.curve = curve;
+    shaper.oversample = "4x";
+    return shaper;
+  }
+
+  function makeRearFocusShaper(ac) {
+    const shaper = ac.createWaveShaper();
+    const N = 2048;
+    const curve = new Float32Array(N);
+    const frontAtten = clamp(A.rearFrontAtten, 0.0, 1.0);
+
+    for (let i = 0; i < N; i++) {
+      const x = (i / (N - 1)) * 2 - 1; // -1..1
+      const scale = x >= 0 ? frontAtten : 1.0;
+      curve[i] = x * scale;
     }
     shaper.curve = curve;
     shaper.oversample = "4x";
@@ -90,7 +107,8 @@
     shaper.connect(dirGain);
 
     // Quadrature delay for ITD (90-degree phase shift)
-    const quadDelay = ac.createDelay(10.0);
+    const quadDelay = ac.createDelay(30.0);
+    const rearFocus = makeRearFocusShaper(ac);
 
     // --- PAN (ILD) ---
     const panDepth = ac.createGain();
@@ -107,8 +125,9 @@
     const delayDepth = ac.createGain();
     const delayDepthNeg = ac.createGain();
     dirGain.connect(quadDelay);
-    quadDelay.connect(delayDepth);
-    quadDelay.connect(delayDepthNeg);
+    quadDelay.connect(rearFocus);
+    rearFocus.connect(delayDepth);
+    rearFocus.connect(delayDepthNeg);
     delayDepth.connect(delayL.delayTime);
     delayDepthNeg.connect(delayR.delayTime);
     baseL.connect(delayL.delayTime);
@@ -154,7 +173,7 @@
     A.pipelines.set(mediaEl, {
       ac, source, splitter, merger,
       delayL, delayR, trem, panner, outGain,
-      lfo, shaper, dirGain, quadDelay, panDepth, baseL, baseR,
+      lfo, shaper, dirGain, quadDelay, rearFocus, panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
     });
 
@@ -178,7 +197,7 @@
 
     p.lfo.frequency.value = A.speedHz;
     p.dirGain.gain.value = A.direction === "left" ? 1 : -1;
-    p.quadDelay.delayTime.value = Math.min(10, 0.25 / A.speedHz);
+    p.quadDelay.delayTime.value = Math.min(30, 0.25 / Math.max(0.001, A.speedHz));
 
     if (!A.enabled) {
       // BYPASS: keep audio flowing, but zero out effect
@@ -227,7 +246,7 @@
       direction: "right"
     });
     A.enabled = !!res.enabled;
-    A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.05, 3.0);
+    A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.01, 1.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
     A.direction = res.direction === "left" ? "left" : "right";
   }
@@ -243,7 +262,7 @@
     if (!msg || msg.type !== "AURAPHASE") return;
 
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
-    if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.05, 3.0);
+    if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.01, 1.0);
     if (msg.intensity != null) A.intensity = clamp(Number(msg.intensity), 0.0, 1.0);
     if (msg.direction != null) A.direction = msg.direction === "left" ? "left" : "right";
 
