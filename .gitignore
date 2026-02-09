@@ -1,0 +1,29 @@
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+build/
+dist/
+web-ext-artifacts/
+
+# Extension packages
+*.xpi
+*.zip
+
+# Env files
+.env
+.env.*
+
+# Editor/IDE
+.vscode/
+.idea/
