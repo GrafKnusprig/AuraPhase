@@ -13,6 +13,8 @@
     spinEnabled: true,
     monoEnabled: false,
 
+    lfoStartTime: null,
+
     ctx: null,
     pipelines: new WeakMap(),
     watcher: null,
@@ -69,6 +71,16 @@
     shaper.oversample = "4x";
   }
 
+  function getPanPosition() {
+    if (!A.enabled || !A.speedHz) return 0.5;
+    const t = A.ctx ? A.ctx.currentTime : performance.now() / 1000;
+    const phase = 2 * Math.PI * A.speedHz * t;
+    const x = Math.sin(phase);
+    const shaped = Math.sign(x) * Math.pow(Math.abs(x), A.shapeGamma);
+    const dirSign = A.direction === "left" ? 1 : -1;
+    return clamp((shaped * dirSign + 1) / 2, 0, 1);
+  }
+
 
   function ensurePipelineFor(mediaEl) {
     if (!(mediaEl instanceof HTMLMediaElement)) return;
@@ -102,6 +114,7 @@
     const trem = ac.createGain();
     const panner = ac.createStereoPanner();
     const outGain = ac.createGain();
+    const dryGain = ac.createGain();
 
     // LFO (orbit)
     const lfo = ac.createOscillator();
@@ -177,6 +190,7 @@
 
     // Wire audio chain
     source.connect(inputGain);
+    source.connect(dryGain);
     splitter.connect(delayL, 0);
     splitter.connect(delayR, 1);
     delayL.connect(merger, 0, 0);
@@ -186,6 +200,7 @@
     trem.connect(panner);
     panner.connect(outGain);
     outGain.connect(ac.destination);
+    dryGain.connect(ac.destination);
 
     outGain.gain.value = 1.0;
 
@@ -194,6 +209,7 @@
     baseR.start();
     tremBase.start();
     lfo.start();
+    if (A.lfoStartTime == null) A.lfoStartTime = ac.currentTime;
 
     // Resume on play (autoplay policies)
     const resume = async () => {
@@ -207,7 +223,7 @@
       ac, source, splitter, merger,
       inputGain, monoSplitter, monoGainL, monoGainR, monoSum, monoMerger,
       monoSelect, stereoSelect,
-      delayL, delayR, trem, panner, outGain,
+      delayL, delayR, trem, panner, outGain, dryGain,
       lfo, shaper, dirGain, quadDelay, gateSign, gateShape, gateGain,
       panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
@@ -235,10 +251,13 @@
     p.dirGain.gain.value = A.direction === "left" ? 1 : -1;
     p.quadDelay.delayTime.value = Math.min(30, 0.25 / Math.max(0.001, A.speedHz));
     p.gateSign.gain.value = A.direction === "left" ? -1 : 1;
-    p.monoSelect.gain.value = A.monoEnabled ? 1 : 0;
-    p.stereoSelect.gain.value = A.monoEnabled ? 0 : 1;
-
     if (!A.enabled) {
+      // True bypass: dry path only.
+      p.outGain.gain.value = 0;
+      p.dryGain.gain.value = 1;
+      // Bypass mono to restore original stereo when disabled.
+      p.monoSelect.gain.value = 0;
+      p.stereoSelect.gain.value = 1;
       // BYPASS: keep audio flowing, but zero out effect
       p.panDepth.gain.value = 0;
       p.delayDepth.gain.value = 0;
@@ -247,6 +266,14 @@
       p.panner.pan.value = 0;
       return;
     }
+
+    // Enabled: wet path only.
+    p.outGain.gain.value = 1;
+    p.dryGain.gain.value = 0;
+
+    // Enabled: allow mono toggle with a small level compensation.
+    p.monoSelect.gain.value = A.monoEnabled ? 0.707 : 0;
+    p.stereoSelect.gain.value = A.monoEnabled ? 0 : 1;
 
     // enabled
     const panAmt = A.maxPan * A.intensity;                 // <= 0.85
@@ -303,7 +330,8 @@
   }
 
   browser.runtime.onMessage.addListener((msg) => {
-    if (!msg || msg.type !== "AURAPHASE") return;
+    if (!msg) return;
+    if (msg.type !== "AURAPHASE") return;
 
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
     if (msg.monoEnabled != null) A.monoEnabled = !!msg.monoEnabled;

@@ -27,6 +27,8 @@ async function sendState(tabId, state) {
   const intensity = document.getElementById("intensity");
   const speedVal = document.getElementById("speedVal");
   const intVal = document.getElementById("intVal");
+  const posViz = document.getElementById("posViz");
+  const posDot = document.getElementById("posDot");
   const coreGroup = document.getElementById("coreGroup");
   const spinToggle = document.getElementById("spinToggle");
   const directionBtn = document.getElementById("directionBtn");
@@ -47,6 +49,48 @@ async function sendState(tabId, state) {
   setDirectionLabel();
 
   spinToggle.checked = stored.spinEnabled !== false;
+  let vizRaf = null;
+  let vizLastTs = null;
+  let vizPhase = 0;
+  let vizSpeed = Number(speed.value) || 0;
+  const shapeGamma = 0.55;
+
+  const clamp01 = (n) => Math.min(1, Math.max(0, Number(n) || 0));
+  const setPos = (pos) => {
+    posDot.style.left = `${clamp01(pos) * 100}%`;
+  };
+
+  const stepViz = (ts) => {
+    if (!toggle.checked) return;
+    if (vizLastTs == null) vizLastTs = ts;
+    const dt = Math.min(0.05, (ts - vizLastTs) / 1000);
+    vizLastTs = ts;
+
+    vizPhase += 2 * Math.PI * vizSpeed * dt;
+    const x = Math.sin(vizPhase);
+    const shaped = Math.sign(x) * Math.pow(Math.abs(x), shapeGamma);
+    const dirSign = direction === "left" ? 1 : -1;
+    setPos((shaped * dirSign + 1) / 2);
+
+    vizRaf = requestAnimationFrame(stepViz);
+  };
+
+  const startPositionUpdates = () => {
+    if (vizRaf != null) return;
+    vizLastTs = null;
+    vizSpeed = Number(speed.value) || 0;
+    vizRaf = requestAnimationFrame(stepViz);
+  };
+
+  const stopPositionUpdates = () => {
+    if (vizRaf == null) return;
+    cancelAnimationFrame(vizRaf);
+    vizRaf = null;
+    vizLastTs = null;
+    vizPhase = 0;
+    vizSpeed = 0;
+    setPos(0.5);
+  };
   const updateUi = () => {
     const masterEnabled = toggle.checked;
     const spinEnabled = masterEnabled && spinToggle.checked;
@@ -60,8 +104,14 @@ async function sendState(tabId, state) {
     coreGroup.classList.toggle("is-disabled", !masterEnabled);
     spinGroup.classList.toggle("is-disabled", !masterEnabled);
     directionWrap.classList.toggle("is-disabled", !spinEnabled);
+    posViz.hidden = !masterEnabled;
+    posViz.classList.toggle("is-disabled", !masterEnabled);
+    if (masterEnabled) startPositionUpdates();
+    else stopPositionUpdates();
   };
   updateUi();
+
+  if (toggle.checked) startPositionUpdates();
 
   async function applyNow() {
     const tab = await getActiveTab();
@@ -78,29 +128,35 @@ async function sendState(tabId, state) {
     await sendState(tab.id, state);
   }
 
+  const applyAndSync = async () => {
+    await applyNow();
+    vizSpeed = Number(speed.value) || 0;
+  };
+
   toggle.addEventListener("change", () => {
     updateUi();
-    applyNow();
+    applyAndSync();
   });
-  monoToggle.addEventListener("change", applyNow);
+  monoToggle.addEventListener("change", applyAndSync);
 
   speed.addEventListener("input", () => { speedVal.textContent = fmtHz(speed.value); });
-  speed.addEventListener("change", applyNow);
+  speed.addEventListener("change", applyAndSync);
 
   intensity.addEventListener("input", () => { intVal.textContent = fmtInt(intensity.value); });
-  intensity.addEventListener("change", applyNow);
+  intensity.addEventListener("change", applyAndSync);
 
   spinToggle.addEventListener("change", async () => {
     updateUi();
-    await applyNow();
+    await applyAndSync();
   });
 
   directionBtn.addEventListener("click", async () => {
     direction = direction === "left" ? "right" : "left";
     setDirectionLabel();
-    await applyNow();
+    await applyAndSync();
   });
 
-  // Optionally: apply when popup opens (keeps tab in sync with stored state)
-  // await applyNow();
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && toggle.checked) startPositionUpdates();
+  });
 })();
