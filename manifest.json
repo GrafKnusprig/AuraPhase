@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AuraPhase",
   "version": "0.3.0",
-  "description": "Orbit-style spatial illusion using panning + Haas delay.",
+  "description": "Orbit-style spatial audio illusion using panning + Haas delay.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"],
   "action": {
