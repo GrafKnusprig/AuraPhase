@@ -18,7 +18,7 @@ async function sendState(tabId, state) {
 }
 
 (async () => {
-  const defaults = { enabled: false, speedHz: 0.25, intensity: 0.7 };
+  const defaults = { enabled: false, speedHz: 0.25, intensity: 0.7, direction: "right" };
   const stored = await browser.storage.local.get(defaults);
 
   const toggle = document.getElementById("toggle");
@@ -26,6 +26,7 @@ async function sendState(tabId, state) {
   const intensity = document.getElementById("intensity");
   const speedVal = document.getElementById("speedVal");
   const intVal = document.getElementById("intVal");
+  const directionBtn = document.getElementById("directionBtn");
 
   toggle.checked = !!stored.enabled;
   speed.value = stored.speedHz;
@@ -33,12 +34,19 @@ async function sendState(tabId, state) {
   speedVal.textContent = fmtHz(speed.value);
   intVal.textContent = fmtInt(intensity.value);
 
+  let direction = stored.direction === "left" ? "left" : "right";
+  const setDirectionLabel = () => {
+    directionBtn.textContent = direction === "left" ? "Left" : "Right";
+  };
+  setDirectionLabel();
+
   async function applyNow() {
     const tab = await getActiveTab();
     const state = {
       enabled: toggle.checked,
       speedHz: Number(speed.value),
-      intensity: Number(intensity.value)
+      intensity: Number(intensity.value),
+      direction
     };
     await browser.storage.local.set(state);
     await ensureInjected(tab.id);
@@ -52,6 +60,12 @@ async function sendState(tabId, state) {
 
   intensity.addEventListener("input", () => { intVal.textContent = fmtInt(intensity.value); });
   intensity.addEventListener("change", applyNow);
+
+  directionBtn.addEventListener("click", async () => {
+    direction = direction === "left" ? "right" : "left";
+    setDirectionLabel();
+    await applyNow();
+  });
 
   // Optionally: apply when popup opens (keeps tab in sync with stored state)
   // await applyNow();

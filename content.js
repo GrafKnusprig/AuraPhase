@@ -9,6 +9,7 @@
     enabled: false,
     speedHz: 0.25,
     intensity: 0.7,
+    direction: "right",
 
     ctx: null,
     pipelines: new WeakMap(),
@@ -20,9 +21,9 @@
     maxDelayDepth: 0.006,  // +/- 6ms => 0..12ms swing
     tremMax: 0.12,         // subtle
 
-    // shape: >1 slows around center (reduces "too fast in middle" feel)
-    // 2.0 is a good start
-    shapeGamma: 2.0
+    // shape: <1 lingers at extremes; >1 lingers near center
+    // 0.55 spends more time left/right without hard edges
+    shapeGamma: 0.55
   };
 
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -48,6 +49,7 @@
     shaper.oversample = "4x";
     return shaper;
   }
+
 
   function ensurePipelineFor(mediaEl) {
     if (!(mediaEl instanceof HTMLMediaElement)) return;
@@ -79,14 +81,21 @@
     lfo.type = "sine";
     lfo.frequency.value = A.speedHz;
 
-    // Shape LFO so center movement is less aggressive
+    // Shape LFO so it lingers at extremes
     const shaper = makeShaper(ac);
     lfo.connect(shaper);
+
+    // Direction gain: flips motion without biasing left/right energy
+    const dirGain = ac.createGain();
+    shaper.connect(dirGain);
+
+    // Quadrature delay for ITD (90-degree phase shift)
+    const quadDelay = ac.createDelay(10.0);
 
     // --- PAN (ILD) ---
     const panDepth = ac.createGain();
     // actual value set in applyParams()
-    shaper.connect(panDepth);
+    dirGain.connect(panDepth);
     panDepth.connect(panner.pan);
 
     // --- ITD (Haas) ---
@@ -97,8 +106,9 @@
 
     const delayDepth = ac.createGain();
     const delayDepthNeg = ac.createGain();
-    shaper.connect(delayDepth);
-    shaper.connect(delayDepthNeg);
+    dirGain.connect(quadDelay);
+    quadDelay.connect(delayDepth);
+    quadDelay.connect(delayDepthNeg);
     delayDepth.connect(delayL.delayTime);
     delayDepthNeg.connect(delayR.delayTime);
     baseL.connect(delayL.delayTime);
@@ -109,7 +119,7 @@
     tremBase.offset.value = 1.0;
 
     const tremDepth = ac.createGain();
-    shaper.connect(tremDepth);
+    dirGain.connect(tremDepth);
     tremDepth.connect(trem.gain);
     tremBase.connect(trem.gain);
 
@@ -144,7 +154,7 @@
     A.pipelines.set(mediaEl, {
       ac, source, splitter, merger,
       delayL, delayR, trem, panner, outGain,
-      lfo, shaper, panDepth, baseL, baseR,
+      lfo, shaper, dirGain, quadDelay, panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
     });
 
@@ -167,6 +177,8 @@
     if (!p) return;
 
     p.lfo.frequency.value = A.speedHz;
+    p.dirGain.gain.value = A.direction === "left" ? 1 : -1;
+    p.quadDelay.delayTime.value = Math.min(10, 0.25 / A.speedHz);
 
     if (!A.enabled) {
       // BYPASS: keep audio flowing, but zero out effect
@@ -211,11 +223,13 @@
     const res = await browser.storage.local.get({
       enabled: false,
       speedHz: 0.25,
-      intensity: 0.7
+      intensity: 0.7,
+      direction: "right"
     });
     A.enabled = !!res.enabled;
     A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.05, 3.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
+    A.direction = res.direction === "left" ? "left" : "right";
   }
 
   function initOrUpdate() {
@@ -231,6 +245,7 @@
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
     if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.05, 3.0);
     if (msg.intensity != null) A.intensity = clamp(Number(msg.intensity), 0.0, 1.0);
+    if (msg.direction != null) A.direction = msg.direction === "left" ? "left" : "right";
 
     initOrUpdate();
   });
