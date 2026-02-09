@@ -53,7 +53,7 @@ async function sendState(tabId, state) {
   let vizLastTs = null;
   let vizPhase = 0;
   let vizSpeed = Number(speed.value) || 0;
-  const shapeGamma = 1.5;
+  const shapeGamma = 0.55;
 
   const clamp01 = (n) => Math.min(1, Math.max(0, Number(n) || 0));
   const setPos = (pos) => {

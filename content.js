@@ -27,7 +27,7 @@
 
     // shape: <1 lingers at extremes; >1 lingers near center
     // 0.55 spends more time left/right without hard edges
-    shapeGamma: 1.5
+    shapeGamma: 0.55
   };
 
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
