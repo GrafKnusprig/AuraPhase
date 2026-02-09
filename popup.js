@@ -108,7 +108,7 @@ async function sendState(tabId, state) {
     coreGroup.classList.toggle("is-disabled", !masterEnabled);
     spinGroup.classList.toggle("is-disabled", !masterEnabled);
     directionWrap.classList.toggle("is-disabled", !spinEnabled);
-    posViz.hidden = !masterEnabled;
+    posViz.hidden = false;
     posViz.classList.toggle("is-disabled", !masterEnabled);
     if (masterEnabled) startPositionUpdates();
     else stopPositionUpdates();
