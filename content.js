@@ -113,6 +113,7 @@
 
     const trem = ac.createGain();
     const panner = ac.createStereoPanner();
+    const limiter = ac.createDynamicsCompressor();
     const outGain = ac.createGain();
     const dryGain = ac.createGain();
 
@@ -198,11 +199,17 @@
 
     merger.connect(trem);
     trem.connect(panner);
-    panner.connect(outGain);
+    panner.connect(limiter);
+    limiter.connect(outGain);
     outGain.connect(ac.destination);
     dryGain.connect(ac.destination);
 
     outGain.gain.value = 1.0;
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.2;
 
     // Start sources
     baseL.start();
@@ -223,7 +230,7 @@
       ac, source, splitter, merger,
       inputGain, monoSplitter, monoGainL, monoGainR, monoSum, monoMerger,
       monoSelect, stereoSelect,
-      delayL, delayR, trem, panner, outGain, dryGain,
+      delayL, delayR, trem, panner, limiter, outGain, dryGain,
       lfo, shaper, dirGain, quadDelay, gateSign, gateShape, gateGain,
       panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
@@ -268,23 +275,26 @@
     }
 
     // Enabled: wet path only.
-    p.outGain.gain.value = 1;
+    const trem = A.tremMax * A.intensity;
+    const panAmt = A.maxPan * A.intensity;                 // <= 0.85
+    const panComp = A.monoEnabled ? 1 : 1 + panAmt * 0.35;
+    const wetComp = 1 / (panComp + trem);
+    p.outGain.gain.value = wetComp;
     p.dryGain.gain.value = 0;
 
-    // Enabled: allow mono toggle with a small level compensation.
-    p.monoSelect.gain.value = A.monoEnabled ? 0.707 : 0;
+    // Enabled: allow mono toggle with unity level.
+    p.monoSelect.gain.value = A.monoEnabled ? 1 : 0;
     p.stereoSelect.gain.value = A.monoEnabled ? 0 : 1;
 
     // enabled
-    const panAmt = A.maxPan * A.intensity;                 // <= 0.85
     const d = A.maxDelayDepth * A.intensity;               // Haas depth
-    const trem = A.tremMax * A.intensity;                  // subtle
+    const tremDepth = trem;                                // subtle
 
     p.panDepth.gain.value = panAmt;
     const delayDepth = A.spinEnabled ? d : 0;
     p.delayDepth.gain.value = delayDepth;
     p.delayDepthNeg.gain.value = -delayDepth;
-    p.tremDepth.gain.value = trem;
+    p.tremDepth.gain.value = tremDepth;
   }
 
   function applyParamsToAll() {
