@@ -20,9 +20,7 @@ async function sendState(tabId, state) {
 (async () => {
   const defaults = { monoEnabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
   const stored = await browser.storage.local.get(defaults);
-
   const tab = await getActiveTab();
-  if (tab?.id != null) await ensureInjected(tab.id);
   const liveState = tab?.id != null
     ? await browser.tabs.sendMessage(tab.id, { type: "AURAPHASE_GET_STATE" }).catch(() => null)
     : null;

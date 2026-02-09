@@ -12,6 +12,7 @@
     direction: "right",
     spinEnabled: true,
     monoEnabled: false,
+    stateFromPopup: false,
 
     lfoStartTime: null,
 
@@ -43,6 +44,13 @@
       }
     });
     return A.ctx;
+  }
+
+  async function resumeContext() {
+    if (!A.ctx) return;
+    if (A.ctx.state !== "running") {
+      try { await A.ctx.resume(); } catch {}
+    }
   }
 
   function makeShaper(ac) {
@@ -338,7 +346,7 @@
       direction: "right",
       spinEnabled: true
     });
-    A.enabled = false;
+    if (!A.stateFromPopup) A.enabled = false;
     A.monoEnabled = !!res.monoEnabled;
     A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.01, 1.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
@@ -351,6 +359,7 @@
     document.querySelectorAll("audio, video").forEach(ensurePipelineFor);
     startWatching();
     applyParamsToAll();
+    if (A.enabled) resumeContext();
   }
 
   browser.runtime.onMessage.addListener((msg) => {
@@ -367,6 +376,7 @@
     }
     if (msg.type !== "AURAPHASE") return;
 
+    A.stateFromPopup = true;
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
     if (msg.monoEnabled != null) A.monoEnabled = !!msg.monoEnabled;
     if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.01, 1.0);
@@ -375,6 +385,7 @@
     if (msg.spinEnabled != null) A.spinEnabled = !!msg.spinEnabled;
 
     initOrUpdate();
+    return Promise.resolve({ ok: true });
   });
 
   (async () => {
