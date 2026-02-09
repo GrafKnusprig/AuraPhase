@@ -20,14 +20,14 @@
     watcher: null,
 
     // caps / tuning
-    maxPan: 0.7,           // never hard L/R
-    baseDelay: 0.004,      // 4ms
-    maxDelayDepth: 0.004,  // +/- 4ms => 0..8ms swing
-    tremMax: 0.08,         // subtle
+    maxPan: 0.99,           // never hard L/R
+    baseDelay: 0.001,      // 1ms base ITD for better front-center image
+    maxDelayDepth: 0.003,  // up to ~5ms ITD (beyond that is usually a separate echo)
+    tremMax: 0,         // subtle tremolo can help the effect gel; 0 to disable
 
     // shape: <1 lingers at extremes; >1 lingers near center
     // 0.55 spends more time left/right without hard edges
-    shapeGamma: 0.55
+    shapeGamma: 1.5
   };
 
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
