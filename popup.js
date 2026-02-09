@@ -18,19 +18,23 @@ async function sendState(tabId, state) {
 }
 
 (async () => {
-  const defaults = { enabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
+  const defaults = { enabled: false, monoEnabled: false, speedHz: 0.25, intensity: 0.7, direction: "right", spinEnabled: true };
   const stored = await browser.storage.local.get(defaults);
 
   const toggle = document.getElementById("toggle");
+  const monoToggle = document.getElementById("monoToggle");
   const speed = document.getElementById("speed");
   const intensity = document.getElementById("intensity");
   const speedVal = document.getElementById("speedVal");
   const intVal = document.getElementById("intVal");
+  const coreGroup = document.getElementById("coreGroup");
   const spinToggle = document.getElementById("spinToggle");
   const directionBtn = document.getElementById("directionBtn");
   const directionWrap = document.getElementById("directionWrap");
+  const spinGroup = document.getElementById("spinGroup");
 
   toggle.checked = !!stored.enabled;
+  monoToggle.checked = !!stored.monoEnabled;
   speed.value = stored.speedHz;
   intensity.value = stored.intensity;
   speedVal.textContent = fmtHz(speed.value);
@@ -38,22 +42,32 @@ async function sendState(tabId, state) {
 
   let direction = stored.direction === "left" ? "left" : "right";
   const setDirectionLabel = () => {
-    directionBtn.textContent = direction === "left" ? "Counterclockwise" : "Clockwise";
+    directionBtn.textContent = direction === "left" ? "Clockwise" : "Counterclockwise";
   };
   setDirectionLabel();
 
   spinToggle.checked = stored.spinEnabled !== false;
-  const updateSpinUi = () => {
-    const disabled = !spinToggle.checked;
-    directionBtn.disabled = disabled;
-    directionWrap.classList.toggle("is-disabled", disabled);
+  const updateUi = () => {
+    const masterEnabled = toggle.checked;
+    const spinEnabled = masterEnabled && spinToggle.checked;
+
+    monoToggle.disabled = !masterEnabled;
+    speed.disabled = !masterEnabled;
+    intensity.disabled = !masterEnabled;
+    spinToggle.disabled = !masterEnabled;
+    directionBtn.disabled = !spinEnabled;
+
+    coreGroup.classList.toggle("is-disabled", !masterEnabled);
+    spinGroup.classList.toggle("is-disabled", !masterEnabled);
+    directionWrap.classList.toggle("is-disabled", !spinEnabled);
   };
-  updateSpinUi();
+  updateUi();
 
   async function applyNow() {
     const tab = await getActiveTab();
     const state = {
       enabled: toggle.checked,
+      monoEnabled: monoToggle.checked,
       speedHz: Number(speed.value),
       intensity: Number(intensity.value),
       direction,
@@ -64,7 +78,11 @@ async function sendState(tabId, state) {
     await sendState(tab.id, state);
   }
 
-  toggle.addEventListener("change", applyNow);
+  toggle.addEventListener("change", () => {
+    updateUi();
+    applyNow();
+  });
+  monoToggle.addEventListener("change", applyNow);
 
   speed.addEventListener("input", () => { speedVal.textContent = fmtHz(speed.value); });
   speed.addEventListener("change", applyNow);
@@ -73,7 +91,7 @@ async function sendState(tabId, state) {
   intensity.addEventListener("change", applyNow);
 
   spinToggle.addEventListener("change", async () => {
-    updateSpinUi();
+    updateUi();
     await applyNow();
   });
 

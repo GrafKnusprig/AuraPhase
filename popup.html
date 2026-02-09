@@ -123,16 +123,31 @@
       </label>
     </div>
 
-    <div class="row">
-      <span>Speed</span>
-      <input id="speed" type="range" min="0.01" max="1.0" step="0.01">
-      <span class="value" id="speedVal"></span>
-    </div>
+    <div class="group" id="coreGroup">
+      <div class="group-head">
+        <span class="group-title">Core Controls</span>
+      </div>
 
-    <div class="row">
-      <span>Intensity</span>
-      <input id="intensity" type="range" min="0" max="1" step="0.01">
-      <span class="value" id="intVal"></span>
+      <div class="row">
+        <span>Mono</span>
+        <span></span>
+        <label class="switch" aria-label="Enable mono input">
+          <input id="monoToggle" type="checkbox">
+          <span class="slider" aria-hidden="true"></span>
+        </label>
+      </div>
+
+      <div class="row">
+        <span>Speed</span>
+        <input id="speed" type="range" min="0.01" max="1.0" step="0.01">
+        <span class="value" id="speedVal"></span>
+      </div>
+
+      <div class="row">
+        <span>Intensity</span>
+        <input id="intensity" type="range" min="0" max="1" step="0.01">
+        <span class="value" id="intVal"></span>
+      </div>
     </div>
 
     <div class="group" id="spinGroup">
@@ -153,7 +168,7 @@
     </div>
 
     <div class="hint">
-      Works best on YouTube. May work on other sites with stereo audio. Try adjusting the speed and intensity to find the sweet spot for each video.
+      Works best on YouTube. Report bugs or feedback on <a href="https://github.com/GrafKnusprig/AuraPhase/issues" target="_blank" rel="noopener noreferrer">GitHub</a>.
     </div>
 
     <script src="popup.js"></script>

@@ -11,6 +11,7 @@
     intensity: 0.7,
     direction: "right",
     spinEnabled: true,
+    monoEnabled: false,
 
     ctx: null,
     pipelines: new WeakMap(),
@@ -24,8 +25,7 @@
 
     // shape: <1 lingers at extremes; >1 lingers near center
     // 0.55 spends more time left/right without hard edges
-    shapeGamma: 0.55,
-    rearFrontAtten: 0.35
+    shapeGamma: 0.55
   };
 
   const clamp = (n, a, b) => Math.min(b, Math.max(a, n));
@@ -52,15 +52,18 @@
     return shaper;
   }
 
-  function applyRearFocusCurve(shaper, frontAtten) {
+  function applyGateCurve(shaper) {
     const N = 2048;
     const curve = new Float32Array(N);
-    const atten = clamp(frontAtten, 0.0, 1.0);
+    const edge = 0.03;
 
     for (let i = 0; i < N; i++) {
       const x = (i / (N - 1)) * 2 - 1; // -1..1
-      const scale = x >= 0 ? atten : 1.0;
-      curve[i] = x * scale;
+      let y = 0;
+      if (x <= -edge) y = 0;
+      else if (x >= edge) y = 1;
+      else y = (x + edge) / (2 * edge);
+      curve[i] = y;
     }
     shaper.curve = curve;
     shaper.oversample = "4x";
@@ -83,6 +86,14 @@
 
     // --- Graph building ---
     const splitter = ac.createChannelSplitter(2);
+    const inputGain = ac.createGain();
+    const monoSplitter = ac.createChannelSplitter(2);
+    const monoGainL = ac.createGain();
+    const monoGainR = ac.createGain();
+    const monoSum = ac.createGain();
+    const monoMerger = ac.createChannelMerger(2);
+    const monoSelect = ac.createGain();
+    const stereoSelect = ac.createGain();
     const merger = ac.createChannelMerger(2);
 
     const delayL = ac.createDelay(0.05);
@@ -107,8 +118,10 @@
 
     // Quadrature delay for ITD (90-degree phase shift)
     const quadDelay = ac.createDelay(30.0);
-    const rearFocus = ac.createWaveShaper();
-    applyRearFocusCurve(rearFocus, A.rearFrontAtten);
+    const gateSign = ac.createGain();
+    const gateShape = ac.createWaveShaper();
+    const gateGain = ac.createGain();
+    applyGateCurve(gateShape);
 
     // --- PAN (ILD) ---
     const panDepth = ac.createGain();
@@ -125,9 +138,12 @@
     const delayDepth = ac.createGain();
     const delayDepthNeg = ac.createGain();
     dirGain.connect(quadDelay);
-    quadDelay.connect(rearFocus);
-    rearFocus.connect(delayDepth);
-    rearFocus.connect(delayDepthNeg);
+    quadDelay.connect(gateSign);
+    gateSign.connect(gateShape);
+    gateShape.connect(gateGain.gain);
+    quadDelay.connect(gateGain);
+    gateGain.connect(delayDepth);
+    gateGain.connect(delayDepthNeg);
     delayDepth.connect(delayL.delayTime);
     delayDepthNeg.connect(delayR.delayTime);
     baseL.connect(delayL.delayTime);
@@ -142,8 +158,25 @@
     tremDepth.connect(trem.gain);
     tremBase.connect(trem.gain);
 
+    // Mono path (L+R summed to dual-mono)
+    monoGainL.gain.value = 0.5;
+    monoGainR.gain.value = 0.5;
+    inputGain.connect(monoSplitter);
+    monoSplitter.connect(monoGainL, 0);
+    monoSplitter.connect(monoGainR, 1);
+    monoGainL.connect(monoSum);
+    monoGainR.connect(monoSum);
+    monoSum.connect(monoMerger, 0, 0);
+    monoSum.connect(monoMerger, 0, 1);
+    monoMerger.connect(monoSelect);
+    monoSelect.connect(splitter);
+
+    // Stereo path (original)
+    inputGain.connect(stereoSelect);
+    stereoSelect.connect(splitter);
+
     // Wire audio chain
-    source.connect(splitter);
+    source.connect(inputGain);
     splitter.connect(delayL, 0);
     splitter.connect(delayR, 1);
     delayL.connect(merger, 0, 0);
@@ -172,8 +205,11 @@
 
     A.pipelines.set(mediaEl, {
       ac, source, splitter, merger,
+      inputGain, monoSplitter, monoGainL, monoGainR, monoSum, monoMerger,
+      monoSelect, stereoSelect,
       delayL, delayR, trem, panner, outGain,
-      lfo, shaper, dirGain, quadDelay, rearFocus, panDepth, baseL, baseR,
+      lfo, shaper, dirGain, quadDelay, gateSign, gateShape, gateGain,
+      panDepth, baseL, baseR,
       delayDepth, delayDepthNeg, tremBase, tremDepth
     });
 
@@ -198,7 +234,9 @@
     p.lfo.frequency.value = A.speedHz;
     p.dirGain.gain.value = A.direction === "left" ? 1 : -1;
     p.quadDelay.delayTime.value = Math.min(30, 0.25 / Math.max(0.001, A.speedHz));
-    applyRearFocusCurve(p.rearFocus, A.spinEnabled ? A.rearFrontAtten : 1.0);
+    p.gateSign.gain.value = A.direction === "left" ? -1 : 1;
+    p.monoSelect.gain.value = A.monoEnabled ? 1 : 0;
+    p.stereoSelect.gain.value = A.monoEnabled ? 0 : 1;
 
     if (!A.enabled) {
       // BYPASS: keep audio flowing, but zero out effect
@@ -243,12 +281,14 @@
   async function loadSettings() {
     const res = await browser.storage.local.get({
       enabled: false,
+      monoEnabled: false,
       speedHz: 0.25,
       intensity: 0.7,
       direction: "right",
       spinEnabled: true
     });
     A.enabled = !!res.enabled;
+    A.monoEnabled = !!res.monoEnabled;
     A.speedHz = clamp(Number(res.speedHz) || 0.25, 0.01, 1.0);
     A.intensity = clamp(Number(res.intensity) ?? 0.7, 0.0, 1.0);
     A.direction = res.direction === "left" ? "left" : "right";
@@ -266,6 +306,7 @@
     if (!msg || msg.type !== "AURAPHASE") return;
 
     if (typeof msg.enabled === "boolean") A.enabled = msg.enabled;
+    if (msg.monoEnabled != null) A.monoEnabled = !!msg.monoEnabled;
     if (msg.speedHz != null) A.speedHz = clamp(Number(msg.speedHz) || 0.25, 0.01, 1.0);
     if (msg.intensity != null) A.intensity = clamp(Number(msg.intensity), 0.0, 1.0);
     if (msg.direction != null) A.direction = msg.direction === "left" ? "left" : "right";
